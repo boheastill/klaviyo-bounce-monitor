@@ -1,0 +1,21 @@
+# deps / build
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+dist/
+build/
+.vite/
+# secrets
+.env
+.env.*
+*.pem
+credentials*.json
+# large models (可重新下载, 超GitHub 100MB)
+*.bin
+ggml-*.bin
+*.gguf
+# os
+.DS_Store
+Thumbs.db

@@ -1,0 +1,9 @@
+{
+  "lookback_days": 3,
+  "thresholds": {
+    "hard_bounce_rate": 0.005,
+    "soft_bounce_rate": 0.02,
+    "total_bounce_rate": 0.02
+  },
+  "comment": "Rates are fractions: 0.005 = 0.5%. Industry baseline: total bounce under 2% is healthy, hard bounce over 0.5% signals list-quality problems. Tune per account once we see real data."
+}
