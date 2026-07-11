@@ -1,0 +1,368 @@
+{
+  "id": "KlaviyoBounceMon01",
+  "name": "Klaviyo Bounce Monitor → Slack",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Klaviyo Bounce Monitor\n**Flow:** Schedule → Config → pull campaigns (last N days) → delivery stats → hard/soft bounce split → evaluate thresholds → Slack summary.\n\n**Demo mode:** Config points at the local mock Klaviyo server (`mock_klaviyo_server.py`) and its `/slack` endpoint — the whole flow executes with zero credentials.\n\n**Go live:** in Config set `klaviyoBaseUrl` to `https://a.klaviyo.com`, paste a private API key, and set `slackWebhookUrl` to a real incoming webhook. Nothing else changes.",
+        "height": 300,
+        "width": 420
+      },
+      "id": "note-1",
+      "name": "How this works",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "id": "trigger-1",
+      "name": "Every 12 hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -40,
+        120
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "trigger-2",
+      "name": "Run manually (demo)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "klaviyoBaseUrl",
+              "type": "string",
+              "value": "http://host.docker.internal:8778"
+            },
+            {
+              "id": "a2",
+              "name": "klaviyoApiKey",
+              "type": "string",
+              "value": "pk_DEMO_NOT_NEEDED_IN_MOCK_MODE"
+            },
+            {
+              "id": "a3",
+              "name": "slackWebhookUrl",
+              "type": "string",
+              "value": "http://host.docker.internal:8778/slack"
+            },
+            {
+              "id": "a4",
+              "name": "lookbackDays",
+              "type": "number",
+              "value": 3
+            },
+            {
+              "id": "a5",
+              "name": "hardBounceThreshold",
+              "type": "number",
+              "value": 0.005
+            },
+            {
+              "id": "a6",
+              "name": "softBounceThreshold",
+              "type": "number",
+              "value": 0.02
+            },
+            {
+              "id": "a7",
+              "name": "totalBounceThreshold",
+              "type": "number",
+              "value": 0.02
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config-1",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        180,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.klaviyoBaseUrl }}/api/campaigns?filter={{ encodeURIComponent('and(equals(messages.channel,\"email\"),greater-than(scheduled_at,' + new Date(Date.now() - $json.lookbackDays * 86400000).toISOString().split('.')[0] + 'Z))') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Klaviyo-API-Key {{ $('Config').first().json.klaviyoApiKey }}"
+            },
+            {
+              "name": "revision",
+              "value": "2025-04-15"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "http-campaigns",
+      "name": "Get Recent Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten the JSON:API campaign list into { id, name, send_time } items\nconst doc = $input.first().json;\nconst campaigns = (doc.data || []).map(c => ({\n  id: c.id,\n  name: c.attributes.name,\n  send_time: c.attributes.send_time,\n}));\nreturn [{ json: { campaigns, ids: campaigns.map(c => c.id) } }];"
+      },
+      "id": "code-extract",
+      "name": "Extract Campaigns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.klaviyoBaseUrl }}/api/campaign-values-reports",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Klaviyo-API-Key {{ $('Config').first().json.klaviyoApiKey }}"
+            },
+            {
+              "name": "revision",
+              "value": "2025-04-15"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ data: { type: 'campaign-values-report', attributes: { timeframe: { key: 'last_7_days' }, statistics: ['recipients','delivered','delivery_rate','bounced','bounce_rate'], filter: 'any(campaign_id,[' + $json.ids.map(i => '\"' + i + '\"').join(',') + '])' } } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "http-stats",
+      "name": "Delivery Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.klaviyoBaseUrl }}/api/metric-aggregates",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Klaviyo-API-Key {{ $('Config').first().json.klaviyoApiKey }}"
+            },
+            {
+              "name": "revision",
+              "value": "2025-04-15"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ data: { type: 'metric-aggregate', attributes: { measurements: ['count'], by: ['$attributed_message', 'bounce_type'], filter: ['any($attributed_message,[' + $('Extract Campaigns').first().json.ids.map(i => '\"' + i + '\"').join(',') + '])'] } } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "http-split",
+      "name": "Hard-Soft Bounce Split",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1060,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Join the three data sources, apply thresholds, build the Slack Block Kit message\nconst cfg = $('Config').first().json;\nconst lookbackDays = cfg.lookbackDays ?? 3;\nconst limits = {\n  Hard: cfg.hardBounceThreshold ?? 0.005,\n  Soft: cfg.softBounceThreshold ?? 0.02,\n  Total: cfg.totalBounceThreshold ?? 0.02,\n};\nconst { campaigns } = $('Extract Campaigns').first().json;\nconst statRows = $('Delivery Stats').first().json.data.attributes.results;\nconst splitRows = $('Hard-Soft Bounce Split').first().json.data.attributes.results;\n\nconst stats = {};\nfor (const row of statRows) stats[row.groupings.campaign_id] = row.statistics;\nconst split = {};\nfor (const row of splitRows) {\n  const [cid, btype] = row.dimensions;\n  split[cid] = split[cid] || { hard: 0, soft: 0 };\n  split[cid][btype.toLowerCase().includes('hard') ? 'hard' : 'soft'] += row.measurements.count[0];\n}\n\nconst pct = (x) => (x * 100).toFixed(2) + '%';\nconst results = campaigns.map(c => {\n  const st = stats[c.id] || {};\n  const sp = split[c.id] || { hard: 0, soft: 0 };\n  const recipients = st.recipients || 1;\n  const rates = {\n    Hard: sp.hard / recipients,\n    Soft: sp.soft / recipients,\n    Total: st.bounce_rate ?? (sp.hard + sp.soft) / recipients,\n  };\n  const breaches = ['Hard', 'Soft', 'Total']\n    .filter(k => rates[k] > limits[k])\n    .map(k => [k, rates[k], limits[k]]);\n  return { ...c, recipients: st.recipients || 0, delivered: st.delivered || 0,\n           rates, totalRate: rates.Total, breaches,\n           severity: breaches.some(b => b[0] === 'Hard') ? 'red' : (breaches.length ? 'orange' : 'ok') };\n});\n\nconst flagged = results.filter(r => r.breaches.length);\nconst healthy = results.filter(r => !r.breaches.length);\nconst icon = flagged.some(r => r.severity === 'red') ? '🚨' : (flagged.length ? '⚠️' : '✅');\nconst COLORS = { red: '#E01E5A', orange: '#ECB22E', green: '#2EB67D' };\n\nconst blocks = [];\nblocks.push({ type: 'header', text: { type: 'plain_text', text: `${icon} Klaviyo Bounce Monitor` } });\nblocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text:\n  `Last ${lookbackDays} days · *${results.length}* campaigns checked · *${flagged.length}* flagged · ${healthy.length} healthy` }] });\n\nconst field = (label, rate, breached, limit) => ({ type: 'mrkdwn',\n  text: `*${label}*\\n${breached ? '⚠️ ' : ''}${pct(rate)} · limit ${pct(limit)}` });\n\nconst attachments = [];\nfor (const r of flagged) {\n  const breached = new Set(r.breaches.map(b => b[0]));\n  const headline = r.severity === 'red' ? 'hard bounces elevated' : 'soft/total bounces elevated';\n  attachments.push({\n    color: COLORS[r.severity],\n    blocks: [{\n      type: 'section',\n      text: { type: 'mrkdwn', text: `*${r.name}* — ${headline}\\nSent ${(r.send_time || '').slice(0, 16).replace('T', ' ')} UTC` },\n      fields: [\n        field('Hard bounce', r.rates.Hard, breached.has('Hard'), limits.Hard),\n        field('Soft bounce', r.rates.Soft, breached.has('Soft'), limits.Soft),\n        field('Total bounce', r.rates.Total, breached.has('Total'), limits.Total),\n        { type: 'mrkdwn', text: `*Delivered*\\n${r.delivered.toLocaleString()} / ${r.recipients.toLocaleString()}` },\n      ],\n    }],\n  });\n}\nif (healthy.length) {\n  attachments.push({\n    color: COLORS.green,\n    blocks: [{ type: 'section', text: { type: 'mrkdwn', text:\n      `*${healthy.length} healthy* · ` + healthy.map(r => `${r.name} (${pct(r.totalRate)})`).join(' · ') } }],\n  });\n}\n\nreturn [{ json: { payload: { blocks, attachments }, flaggedCount: flagged.length } }];"
+      },
+      "id": "code-evaluate",
+      "name": "Evaluate & Build Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.slackWebhookUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "id": "http-slack",
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1500,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Every 12 hours": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually (demo)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Extract Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Delivery Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delivery Stats": {
+      "main": [
+        [
+          {
+            "node": "Hard-Soft Bounce Split",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hard-Soft Bounce Split": {
+      "main": [
+        [
+          {
+            "node": "Evaluate & Build Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate & Build Message": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
