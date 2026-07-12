@@ -12,12 +12,12 @@ are shared**.
 
 ```mermaid
 flowchart LR
-    A[Schedule trigger\nevery 12h] --> B[Config\nthresholds and keys in one node]
-    B --> C[Klaviyo API\nGET campaigns, last N days]
-    C --> D[Klaviyo Reporting API\ndelivery and bounce stats]
-    D --> E[Klaviyo Metric Aggregates\nhard vs soft bounce split]
-    E --> F{Evaluate\nthresholds}
-    F --> G[Slack\nBlock Kit summary,\nflagged campaigns first]
+    A["Schedule trigger<br/>every 12h"] --> B["Config<br/>thresholds and keys in one node"]
+    B --> C["Klaviyo API<br/>GET campaigns, last N days"]
+    C --> D["Klaviyo Reporting API<br/>delivery and bounce stats"]
+    D --> E["Klaviyo Metric Aggregates<br/>hard vs soft bounce split"]
+    E --> F{"Evaluate<br/>thresholds"}
+    F --> G["Slack<br/>Block Kit summary,<br/>flagged campaigns first"]
 ```
 
 Three data sources are joined per campaign:
@@ -27,6 +27,23 @@ Three data sources are joined per campaign:
 | Campaigns sent in window | `GET /api/campaigns` (filtered on `scheduled_at`) | the "last 3 days" scope |
 | Recipients, delivered, total bounces | `POST /api/campaign-values-reports` | totals + total bounce rate |
 | Hard vs soft split | `POST /api/metric-aggregates` on the *Bounced Email* metric | hard and soft thresholds separately |
+
+One monitoring run, end to end:
+
+```mermaid
+sequenceDiagram
+    participant N as n8n or CLI
+    participant K as Klaviyo API
+    participant S as Slack
+    N->>K: GET campaigns sent in last 3 days
+    K-->>N: 5 campaigns
+    N->>K: POST campaign-values-reports batched
+    K-->>N: delivered and bounce totals
+    N->>K: POST metric-aggregates Bounced Email
+    K-->>N: hard vs soft split
+    N->>N: evaluate thresholds per campaign
+    N->>S: Block Kit summary, flagged first
+```
 
 Severity: hard-bounce breach → 🔴 (reputation risk), soft/total breach → 🟠,
 otherwise ✅ listed as healthy in a compact footer.
