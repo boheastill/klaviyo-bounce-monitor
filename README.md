@@ -116,4 +116,4 @@ message accepted by the webhook endpoint. Same result from
 
 ---
 
-*Built by [Bohea Still](https://boheastill.com/?utm_source=github&utm_campaign=klaviyo-bounce-monitor) — independent developer taking on automation, AI-pipeline and integration projects.*
+*Built by [Bohea Still](https://boheastill.com/?r=gh-klaviyo) — independent developer taking on automation, AI-pipeline and integration projects.*
