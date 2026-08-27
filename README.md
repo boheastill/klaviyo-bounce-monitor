@@ -1,5 +1,8 @@
 # Klaviyo Bounce Monitor → Slack
 
+> 本仓是代码权威源。投标证明件（job 详情/测试报告/outline 留档）在姊妹仓
+> [klaviyo-bounce-monitor-delivery](https://github.com/boheastill/klaviyo-bounce-monitor-delivery)。
+
 A lightweight bot that pulls Klaviyo campaigns sent in the last 3 days, checks
 **hard / soft / total bounce rates** against configurable thresholds, and posts
 a summary to Slack flagging anything elevated.
