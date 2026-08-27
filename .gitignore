@@ -19,3 +19,4 @@ ggml-*.bin
 # os
 .DS_Store
 Thumbs.db
+.claude/
