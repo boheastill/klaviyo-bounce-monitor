@@ -1,7 +1,9 @@
 # Klaviyo Bounce Monitor → Slack
 
-> 本仓是代码权威源。投标证明件（job 详情/测试报告/outline 留档）在姊妹仓
-> [klaviyo-bounce-monitor-delivery](https://github.com/boheastill/klaviyo-bounce-monitor-delivery)。
+> **Status:** a demo built for a client bid. It runs end to end against a mocked
+> Klaviyo API and has never been connected to a live account. It shows the
+> approach; it is not production code. See
+> [Before this touches a live account](#before-this-touches-a-live-account).
 
 A lightweight bot that pulls Klaviyo campaigns sent in the last 3 days, checks
 **hard / soft / total bounce rates** against configurable thresholds, and posts
@@ -126,6 +128,23 @@ Notes for the live switch:
 5 campaigns fetched, stats joined, 2 flagged (1 hard 🔴, 1 soft 🟠), Block Kit
 message accepted by the webhook endpoint. Same result from
 `bounce_monitor.py --mock`.
+
+## Before this touches a live account
+
+The demo proves the pipeline works on the happy path. A monitor other people
+rely on also has to behave when things go wrong:
+
+- **Scheduled, stateful, idempotent runs.** A rerun or a retry never posts the
+  same alert twice.
+- **Rate limits and paging.** Honour `Retry-After` on 429s and page through
+  every campaign. If data comes back partial, say "partial" instead of judging
+  on it.
+- **A heartbeat.** If the monitor itself stops, that is an alert too; a silent
+  monitor looks exactly like a healthy account.
+- **Validate against the account's real payloads** (the two places noted
+  above) before trusting any threshold.
+- **Least privilege.** Read-only API scopes, keys in a secret store, nothing
+  that can send or delete.
 
 ## Obvious next iterations (once real data is visible)
 
